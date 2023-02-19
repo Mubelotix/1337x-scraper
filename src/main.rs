@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::{anyhow, bail};
 use serde::{Serialize, Deserialize};
 use scraper::{Selector, Html};
@@ -82,6 +84,7 @@ fn parse_time_offset(now: u64, value: &str) -> Option<u64> {
         "week" => Some(now - number * 86400 * 7),
         "month" => Some(now - number * 86400 * 30),
         "year" => Some(now - number * 86400 * 365),
+        "decade" => Some(now - number * 86400 * 365 * 10),
         _ => None,
     }
 }
@@ -128,7 +131,7 @@ fn parse_file(value: &str) -> Option<File> {
     Some(File { name, size })
 }
 
-fn scrape_torrent(id: usize) -> Result<TorrentInfo, anyhow::Error> {
+fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     let url = format!("https://1337x.torrentbay.to/torrent/{id}/friendly-scraper/");
     let resp = minreq::get(url).send()?;
     let body = resp.as_str()?;
@@ -144,6 +147,9 @@ fn scrape_torrent(id: usize) -> Result<TorrentInfo, anyhow::Error> {
     let span_selector = Selector::parse("span").unwrap();
     let lists = document.select(&list_selector).collect::<Vec<_>>();
     if lists.len() != 3 {
+        if body.contains("Bad Torrent ID.") {
+            return Ok(None);
+        }
         println!("{body}");
         bail!("Unexpected number of lists: {}", lists.len());
     }
@@ -201,15 +207,28 @@ fn scrape_torrent(id: usize) -> Result<TorrentInfo, anyhow::Error> {
     let infohash_el = document.select(&infohash_selector).next().ok_or_else(|| anyhow::anyhow!("No infohash found"))?;
     let infohash = infohash_el.text().next().unwrap_or_default().to_string();
 
-    // Scrape description
+    // Scrape name and description
+    let h1_selector = Selector::parse("h1").unwrap();
+    let h1 = document.select(&h1_selector).next().ok_or_else(|| anyhow::anyhow!("No h1 found"))?;
+    let mut name = h1.text().next().unwrap_or_default().trim().to_string();
+    let mut name_incomplete = false;
+    if name.ends_with("...") {
+        name.pop();
+        name.pop();
+        name.pop();
+        name_incomplete = true;
+    }
     let description_selector = Selector::parse(".torrent-tabs #description").unwrap();
     let description_el = document.select(&description_selector).next().ok_or_else(|| anyhow::anyhow!("No description found"))?;
     let mut description_parts = description_el.text().map(|t| t.trim()).filter(|t| !t.is_empty()).collect::<Vec<_>>();
-    if description_parts.is_empty() {
-        bail!("Empty description");
+    if description_parts.len() == 1 && description_parts[0] == "No description given." {
+        description_parts.clear();
     }
-    let name = description_parts.remove(0).to_string();
-    let description = description_parts.join("\n");
+    let mut description = description_parts.join("\n");
+    if (name_incomplete && description.starts_with(&name)) || (!name_incomplete && description.starts_with(&format!("{name}\n"))) {
+        name = description.lines().next().unwrap_or_default().to_string();
+        description = description.lines().skip(1).collect::<Vec<_>>().join("\n");
+    }
 
     // Scrape images
     let image_selector = Selector::parse(".torrent-tabs #description img").unwrap();
@@ -273,7 +292,7 @@ fn scrape_torrent(id: usize) -> Result<TorrentInfo, anyhow::Error> {
         }
     }
 
-    Ok(TorrentInfo {
+    Ok(Some(TorrentInfo {
         name,
         description,
         ty,
@@ -293,15 +312,34 @@ fn scrape_torrent(id: usize) -> Result<TorrentInfo, anyhow::Error> {
         leechers,
         scraped_ts: now,
         tmdb_id,
-    })
+    }))
 }
 
 fn main() {
-    let mut i = 5526000;
+    let data = std::fs::read_to_string("data.json").unwrap();
+    let mut data: BTreeMap<usize, Option<TorrentInfo>> = serde_json::from_str(&data).unwrap();
+    let mut i = 99;
     loop {
-        let info = scrape_torrent(i).unwrap();
-        println!("{info:#?}");
         i += 1;
+
+        if data.contains_key(&i) {
+            continue;
+        }
+
+        match scrape_torrent(i) {
+            Ok(info) => {
+                println!("Scraped torrent {i}: {}", info.as_ref().map(|i| i.name.as_str()).unwrap_or("none"));
+                data.insert(i, info);
+            }
+            Err(err) => eprintln!("Failed to scrape torrent {i}: {err}"),
+        }
+
+        if i % 10 == 0 {
+            println!("Saving data");
+            let mut file = std::fs::File::create("data.json").unwrap();
+            serde_json::to_writer_pretty(&mut file, &data).unwrap();
+        }
+
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
