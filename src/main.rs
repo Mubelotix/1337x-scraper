@@ -448,7 +448,9 @@ fn main() {
 
         match scrape_torrent(i) {
             Ok(info) => {
-                info!("Scraped torrent {i}: {}", info.as_ref().map(|i| i.name.as_str()).unwrap_or("none"));
+                if let Some(torrent) = &info {
+                    info!("Scraped torrent {i}: {}", torrent.name);
+                }
                 stash.insert(i, info);
             }
             Err(err) => error!("Failed to scrape torrent {i}: {err}"),
