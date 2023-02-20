@@ -8,12 +8,24 @@ fn is_zero(val: &usize) -> bool {
     *val == 0
 }
 
+fn is_zero_u64(val: &u64) -> bool {
+    *val == 0
+}
+
 fn is_user(val: &String) -> bool {
     val == "user"
 }
 
 fn user() -> String {
     String::from("user")
+}
+
+fn is_thread_user_avatar(val: &String) -> bool {
+    val == "/images/thread-user.jpg"
+}
+
+fn thread_user_avatar() -> String {
+    String::from("/images/thread-user.jpg")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +71,8 @@ struct TorrentInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct File {
     name: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero_u64")]
     size: u64,
 }
 
@@ -74,6 +88,8 @@ struct RawComment {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Comment {
+    #[serde(default = "thread_user_avatar")]
+    #[serde(skip_serializing_if = "is_thread_user_avatar")]
     avatar: String,
     #[serde(default = "user")]
     #[serde(skip_serializing_if = "is_user")]
