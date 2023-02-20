@@ -368,6 +368,8 @@ fn main() {
             continue;
         }
 
+        let before = std::time::Instant::now();
+
         match scrape_torrent(i) {
             Ok(info) => {
                 info!("Scraped torrent {i}: {}", info.as_ref().map(|i| i.name.as_str()).unwrap_or("none"));
@@ -383,6 +385,8 @@ fn main() {
             debug!("Saved data");
         }
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        let elapsed = before.elapsed();
+        let remaining = std::time::Duration::from_secs(1).saturating_sub(elapsed);
+        std::thread::sleep(remaining);
     }
 }
