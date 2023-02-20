@@ -101,7 +101,7 @@ fn parse_data_size(value: &str) -> Option<u64> {
         return None;
     }
 
-    let number = match parts[0].parse::<f64>() {
+    let number = match parts[0].replace(',', "").parse::<f64>() {
         Ok(number) => number,
         Err(_) => return None,
     };
