@@ -259,12 +259,12 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     // Scrape infohash
     let infohash_selector = Selector::parse(".infohash-box>p>span").unwrap();
     let infohash_el = document.select(&infohash_selector).next().ok_or_else(|| anyhow::anyhow!("No infohash found"))?;
-    let infohash = infohash_el.text().next().unwrap_or_default().to_string();
+    let infohash = infohash_el.text().collect::<Vec<_>>().join("").trim().to_string();
 
     // Scrape name and description
     let h1_selector = Selector::parse("h1").unwrap();
     let h1 = document.select(&h1_selector).next().ok_or_else(|| anyhow::anyhow!("No h1 found"))?;
-    let mut name = h1.text().next().unwrap_or_default().trim().to_string();
+    let mut name = h1.text().collect::<Vec<_>>().join("").trim().to_string();
     let mut name_incomplete = false;
     if name.ends_with("...") {
         name.pop();
@@ -280,7 +280,7 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     }
     let mut description = description_parts.join("\n");
     if (name_incomplete && description.starts_with(&name)) || (!name_incomplete && description.starts_with(&format!("{name}\n"))) {
-        name = description.lines().next().unwrap_or_default().to_string();
+        name = description.lines().next().unwrap().to_string();
         description = description.lines().skip(1).collect::<Vec<_>>().join("\n");
     }
 
@@ -293,7 +293,7 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     // Scrape trackers
     let tracker_selector = Selector::parse(".torrent-tabs #tracker-list li").unwrap();
     let trackers = document.select(&tracker_selector)
-        .map(|li| li.text().next().unwrap_or_default().trim().to_string())
+        .map(|li| li.text().collect::<Vec<_>>().join("").trim().to_string())
         .collect::<Vec<_>>();
 
     // Scrape files
