@@ -180,7 +180,7 @@ fn parse_file(value: &str) -> Option<File> {
 
 fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     let url = format!("https://1337x.torrentbay.to/torrent/{id}/friendly-scraper/");
-    let resp = minreq::get(url).send()?;
+    let resp = minreq::get(url).with_timeout(10).send()?;
     let body = resp.as_str()?;
     if resp.status_code != 200 {
         bail!("Unexpected status code {}: {} {}", id, resp.status_code, body);
