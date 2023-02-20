@@ -194,7 +194,7 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     let span_selector = Selector::parse("span").unwrap();
     let lists = document.select(&list_selector).collect::<Vec<_>>();
     if lists.len() != 3 {
-        if body.contains("Bad Torrent ID.") {
+        if body.contains("Bad Torrent ID.") || body.contains("This torrent is hidden and pending moderation.") {
             return Ok(None);
         }
         debug!("{body}");
