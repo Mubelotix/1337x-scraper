@@ -449,7 +449,7 @@ fn main() {
         match scrape_torrent(i) {
             Ok(info) => {
                 if let Some(torrent) = &info {
-                    info!("Scraped torrent {i}: {}", torrent.name);
+                    debug!("Scraped torrent {i}: {}", torrent.name);
                 }
                 stash.insert(i, info);
             }
