@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-
+use log::*;
 use anyhow::{anyhow, bail};
 use serde::{Serialize, Deserialize};
 use scraper::{Selector, Html};
@@ -150,7 +150,7 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
         if body.contains("Bad Torrent ID.") {
             return Ok(None);
         }
-        println!("{body}");
+        debug!("{body}");
         bail!("Unexpected number of lists: {}", lists.len());
     }
     let mut spans = lists[1].select(&span_selector).collect::<Vec<_>>();
@@ -181,20 +181,20 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     let tmdb_id = 'tbdb_id: {match movie_link {
         Some(movie_link) => {
             if !movie_link.starts_with("/movie/") {
-                eprintln!("Unexpected movie link: {movie_link}");
+                warn!("Unexpected movie link: {movie_link}");
                 break 'tbdb_id None;
             }
 
             let parts = movie_link.split('/').filter(|p| !p.is_empty()).collect::<Vec<_>>();
             if parts.len() != 3 {
-                eprintln!("Unexpected movie link: {movie_link}");
+                warn!("Unexpected movie link: {movie_link}");
                 break 'tbdb_id None;
             }
 
             match parts[1].parse::<usize>() {
                 Ok(tmdb_id) => Some(tmdb_id),
                 Err(err) => {
-                    eprintln!("Unexpected movie link: {movie_link} ({err})");
+                    warn!("Unexpected movie link: {movie_link} ({err})");
                     break 'tbdb_id None;
                 }
             }
@@ -251,7 +251,7 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     for raw_file in raw_files {
         match parse_file(&raw_file) {
             Some(file) => files.push(file),
-            None => eprintln!("Failed to parse file: {raw_file}"),
+            None => warn!("Failed to parse file: {raw_file}"),
         }
     }
 
@@ -261,19 +261,20 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
         span.text().next().and_then(|text| text.parse::<usize>().ok())
     }).unwrap_or_default();
     let mut comments: Vec<Comment> = Vec::new();
-    if comment_count > 0 {
+    'comments: {if comment_count > 0 {
         let comments_url = format!("https://1337x.torrentbay.to/comments.php?torrentid={id}");
         let comments_resp = minreq::get(comments_url).send()?;
         let comments_body = comments_resp.as_str()?;
         if comments_resp.status_code != 200 {
-            bail!("Unexpected status code for comments {}: {} {}", id, comments_resp.status_code, comments_body);
+            warn!("Unexpected status code for comments {}: {} {}", id, comments_resp.status_code, comments_body);
+            break 'comments;
         }
         let raw_comments: Vec<RawComment> = serde_json::from_str(comments_body)?;
         for raw_comment in raw_comments {
             let posted = match parse_time_offset(now, &raw_comment.posted) {
                 Some(posted) => posted,
                 None => {
-                    eprintln!("Failed to parse comment posted time: {}", raw_comment.posted);
+                    warn!("Failed to parse comment posted time: {}", raw_comment.posted);
                     continue;
                 }
             };
@@ -288,9 +289,9 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
             comments.push(comment);
         }
         if comments.is_empty() {
-            eprintln!("No comments found for {id}");
+            warn!("No comments found for {id}");
         }
-    }
+    }}
 
     Ok(Some(TorrentInfo {
         name,
@@ -316,6 +317,8 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
 }
 
 fn main() {
+    env_logger::init();
+
     let data = std::fs::read_to_string("data.json").unwrap();
     let mut data: BTreeMap<usize, Option<TorrentInfo>> = serde_json::from_str(&data).unwrap();
     let mut i = 99;
@@ -328,16 +331,17 @@ fn main() {
 
         match scrape_torrent(i) {
             Ok(info) => {
-                println!("Scraped torrent {i}: {}", info.as_ref().map(|i| i.name.as_str()).unwrap_or("none"));
+                info!("Scraped torrent {i}: {}", info.as_ref().map(|i| i.name.as_str()).unwrap_or("none"));
                 data.insert(i, info);
             }
-            Err(err) => eprintln!("Failed to scrape torrent {i}: {err}"),
+            Err(err) => error!("Failed to scrape torrent {i}: {err}"),
         }
 
         if i % 60 == 0 {
-            println!("Saving data");
+            debug!("Saving data");
             let mut file = std::fs::File::create("data.json").unwrap();
             serde_json::to_writer_pretty(&mut file, &data).unwrap();
+            debug!("Saved data");
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
