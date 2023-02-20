@@ -299,7 +299,7 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     // Scrape files
     let file_selector = Selector::parse(".torrent-tabs #files li").unwrap();
     let raw_files = document.select(&file_selector)
-        .map(|li| li.text().next().unwrap_or_default().trim().to_string())
+        .map(|li| li.text().collect::<Vec<_>>().join("").trim().to_string())
         .collect::<Vec<_>>();
     let mut files: Vec<File> = Vec::new();
     for raw_file in raw_files {
