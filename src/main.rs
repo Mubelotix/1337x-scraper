@@ -20,10 +20,17 @@ struct TorrentInfo {
     seeders: usize,
     leechers: usize,
     scraped_ts: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tmdb_id: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    series_id: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     images: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     trackers: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     files: Vec<File>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     comments: Vec<Comment>,
 }
 
@@ -178,28 +185,35 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     let movie_link = document.select(&movie_link_selector).next().and_then(|link| {
         link.value().attr("href").map(|href| href.to_string())
     });
-    let tmdb_id = 'tbdb_id: {match movie_link {
-        Some(movie_link) => {
-            if !movie_link.starts_with("/movie/") {
-                warn!("Unexpected movie link: {movie_link}");
-                break 'tbdb_id None;
-            }
-
-            let parts = movie_link.split('/').filter(|p| !p.is_empty()).collect::<Vec<_>>();
+    let mut tmdb_id = None;
+    let mut series_id = None;
+    #[allow(clippy::unnecessary_operation)]
+    'tmdb_id: {if let Some(movie_link) = movie_link {
+        let parts = movie_link.split('/').filter(|p| !p.is_empty()).collect::<Vec<_>>();
+        
+        if movie_link.starts_with("/movie/") {
             if parts.len() != 3 {
                 warn!("Unexpected movie link: {movie_link}");
-                break 'tbdb_id None;
+                break 'tmdb_id;
             }
 
             match parts[1].parse::<usize>() {
-                Ok(tmdb_id) => Some(tmdb_id),
+                Ok(id) => tmdb_id = Some(id),
                 Err(err) => {
                     warn!("Unexpected movie link: {movie_link} ({err})");
-                    break 'tbdb_id None;
+                    break 'tmdb_id;
                 }
             }
+        } else if movie_link.starts_with("/series/") {
+            if parts.len() != 2 {
+                warn!("Unexpected series link: {movie_link}");
+                break 'tmdb_id;
+            }
+
+            series_id = Some(parts[1].to_string());
+        } else {
+            warn!("Unexpected movie link: {movie_link}");
         }
-        None => None,
     }};
 
     // Scrape infohash
@@ -313,6 +327,7 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
         leechers,
         scraped_ts: now,
         tmdb_id,
+        series_id,
     }))
 }
 
