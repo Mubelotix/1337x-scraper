@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::{Instant, Duration}};
 use log::*;
 use anyhow::{anyhow, bail};
 use serde::{Serialize, Deserialize};
@@ -436,6 +436,8 @@ fn main() {
     env_logger::init();
 
     let mut stash = Stash::open();
+    let start = Instant::now();
+    let mut queries = 0;
     let mut i: usize = 99;
     loop {
         i += 1;
@@ -451,13 +453,19 @@ fn main() {
             }
             Err(err) => error!("Failed to scrape torrent {i}: {err}"),
         }
+        queries += 1;
 
         if i % 80 == 0 {
             debug!("Saving data");
             stash.save();
+            let ms_per_query = start.elapsed().as_millis() as f64 / queries as f64;
+            let remaining_queries = 5559585 - queries;
+            let percentage = (i as f64 / 5559585.0) * 100.0;
+            let remaining_hours = (remaining_queries as f64 * ms_per_query) / 1000.0 / 60.0 / 60.0;
             debug!("Saved data");
+            info!("We scraped {percentage:.2}% of torrents. At the current rate, we will finish in {remaining_hours:.2} hours.");
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(50));
     }
 }
