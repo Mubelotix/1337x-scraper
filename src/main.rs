@@ -371,16 +371,76 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     }))
 }
 
+struct Stash {
+    loaded_chunk: usize,
+    chunk: BTreeMap<usize, Option<TorrentInfo>>,
+}
+
+impl Stash {
+    pub fn open() -> Self {
+        let chunk_data = std::fs::read_to_string("stash/0.json").unwrap();
+        let chunk: BTreeMap<usize, Option<TorrentInfo>> = serde_json::from_str(&chunk_data).unwrap();
+
+        Self {
+            loaded_chunk: 0,
+            chunk,
+        }
+    }
+
+    fn load_chunk(&mut self, chunck_id: usize) {
+        debug!("Loading chunk {chunck_id}");
+
+        // Save current chunk and remove its data
+        self.save();
+        self.chunk.retain(|i,_| *i < self.loaded_chunk * 1000 || *i >= (self.loaded_chunk + 1) * 1000);
+
+        // Load new chunk
+        self.loaded_chunk = chunck_id;
+        let new_chunk_data = std::fs::read_to_string(format!("stash/{chunck_id}.json")).unwrap_or_else(|_| String::from("{}"));
+        let new_chunk: BTreeMap<usize, Option<TorrentInfo>> = serde_json::from_str(&new_chunk_data).unwrap();
+
+        // Merge new chunk into current chunk
+        if !self.chunk.is_empty() {
+            self.chunk.extend(new_chunk)
+        } else {
+            self.chunk = new_chunk;
+        }
+    }
+
+    fn load_item_chunk(&mut self, i: usize) {
+        let chunk_id = i.div_euclid(1000);
+        if self.loaded_chunk != chunk_id {
+            self.load_chunk(chunk_id);
+        }
+    }
+
+    pub fn insert(&mut self, i: usize, info: Option<TorrentInfo>) {
+        self.load_item_chunk(i);
+        self.chunk.insert(i, info);
+    }
+
+    pub fn contains_key(&mut self, i: &usize) -> bool {
+        self.load_item_chunk(*i);
+        self.chunk.contains_key(i)
+    }
+
+    pub fn save(&self) {
+        let mut chunk_clone = self.chunk.clone();
+        chunk_clone.retain(|i,_| *i >= self.loaded_chunk * 1000 && *i < (self.loaded_chunk + 1) * 1000);
+        let chunk_data = serde_json::to_string_pretty(&chunk_clone).unwrap();
+        std::fs::write(format!("stash/{}.json", self.loaded_chunk), chunk_data).unwrap();
+    }
+}
+
 fn main() {
     env_logger::init();
 
-    let data = std::fs::read_to_string("data.json").unwrap();
-    let mut data: BTreeMap<usize, Option<TorrentInfo>> = serde_json::from_str(&data).unwrap();
-    let mut i = 99;
+    let mut stash = Stash::open();
+    let mut i: usize = 99;
     loop {
         i += 1;
 
-        if data.contains_key(&i) {
+        if stash.contains_key(&i) {
             continue;
         }
 
@@ -389,15 +449,14 @@ fn main() {
         match scrape_torrent(i) {
             Ok(info) => {
                 info!("Scraped torrent {i}: {}", info.as_ref().map(|i| i.name.as_str()).unwrap_or("none"));
-                data.insert(i, info);
+                stash.insert(i, info);
             }
             Err(err) => error!("Failed to scrape torrent {i}: {err}"),
         }
 
         if i % 60 == 0 {
             debug!("Saving data");
-            let mut file = std::fs::File::create("data.json").unwrap();
-            serde_json::to_writer_pretty(&mut file, &data).unwrap();
+            stash.save();
             debug!("Saved data");
         }
 
