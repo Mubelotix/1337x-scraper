@@ -4,6 +4,18 @@ use anyhow::{anyhow, bail};
 use serde::{Serialize, Deserialize};
 use scraper::{Selector, Html};
 
+fn is_zero(val: &usize) -> bool {
+    *val == 0
+}
+
+fn is_user(val: &String) -> bool {
+    val == "user"
+}
+
+fn user() -> String {
+    String::from("user")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TorrentInfo {
     name: String,
@@ -17,19 +29,29 @@ struct TorrentInfo {
     downloads: usize,
     last_checked_ts: u64,
     uploaded_ts: u64,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero")]
     seeders: usize,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero")]
     leechers: usize,
     scraped_ts: u64,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     tmdb_id: Option<usize>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     series_id: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     images: Vec<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     trackers: Vec<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     files: Vec<File>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     comments: Vec<Comment>,
 }
@@ -53,6 +75,8 @@ struct RawComment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Comment {
     avatar: String,
+    #[serde(default = "user")]
+    #[serde(skip_serializing_if = "is_user")]
     class: String,
     comment: String,
     commentid: u64,
