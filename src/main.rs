@@ -79,11 +79,11 @@ struct File {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RawComment {
     avatar: String,
-    class: String,
+    class: Option<String>,
     comment: String,
     commentid: u64,
     posted: String,
-    username: String,
+    username: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -334,11 +334,11 @@ fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
             };
             let comment = Comment {
                 avatar: raw_comment.avatar,
-                class: raw_comment.class,
+                class: raw_comment.class.unwrap_or(String::from("[deleted]")),
                 comment: raw_comment.comment,
                 commentid: raw_comment.commentid,
                 posted,
-                username: raw_comment.username,
+                username: raw_comment.username.unwrap_or(String::from("[deleted]")),
             };
             comments.push(comment);
         }
