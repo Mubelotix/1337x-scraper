@@ -334,7 +334,7 @@ fn main() {
             Err(err) => eprintln!("Failed to scrape torrent {i}: {err}"),
         }
 
-        if i % 10 == 0 {
+        if i % 60 == 0 {
             println!("Saving data");
             let mut file = std::fs::File::create("data.json").unwrap();
             serde_json::to_writer_pretty(&mut file, &data).unwrap();
