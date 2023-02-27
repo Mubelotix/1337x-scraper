@@ -393,19 +393,11 @@ impl Stash {
 
         // Save current chunk and remove its data
         self.save();
-        self.chunk.retain(|i,_| *i < self.loaded_chunk * 1000 || *i >= (self.loaded_chunk + 1) * 1000);
 
         // Load new chunk
         self.loaded_chunk = chunck_id;
         let new_chunk_data = std::fs::read_to_string(format!("stash/{chunck_id}.json")).unwrap_or_else(|_| String::from("{}"));
-        let new_chunk: BTreeMap<usize, Option<TorrentInfo>> = serde_json::from_str(&new_chunk_data).unwrap();
-
-        // Merge new chunk into current chunk
-        if !self.chunk.is_empty() {
-            self.chunk.extend(new_chunk)
-        } else {
-            self.chunk = new_chunk;
-        }
+        self.chunk = serde_json::from_str(&new_chunk_data).unwrap();
     }
 
     fn load_item_chunk(&mut self, i: usize) {
@@ -426,9 +418,7 @@ impl Stash {
     }
 
     pub fn save(&self) {
-        let mut chunk_clone = self.chunk.clone();
-        chunk_clone.retain(|i,_| *i >= self.loaded_chunk * 1000 && *i < (self.loaded_chunk + 1) * 1000);
-        let chunk_data = serde_json::to_string_pretty(&chunk_clone).unwrap();
+        let chunk_data = serde_json::to_string_pretty(&self.chunk).unwrap();
         std::fs::write(format!("stash/{}.json", self.loaded_chunk), chunk_data).unwrap();
     }
 }
