@@ -181,13 +181,14 @@ fn parse_file(value: &str) -> Option<File> {
 fn scrape_torrent(id: usize) -> Result<Option<TorrentInfo>, anyhow::Error> {
     let url = format!("https://1337x.torrentbay.to/torrent/{id}/friendly-scraper/");
     let resp = minreq::get(url).with_timeout(10).send()?;
-    let body = resp.as_str()?;
+    let body = resp.as_bytes();
+    let body = String::from_utf8_lossy(body);
     if resp.status_code != 200 {
         bail!("Unexpected status code {}: {} {}", id, resp.status_code, body);
     }
 
     let now = chrono::Utc::now().timestamp() as u64;
-    let document = Html::parse_document(body);
+    let document = Html::parse_document(&body);
 
     // Scrape general information
     let list_selector = Selector::parse(".list").unwrap();
